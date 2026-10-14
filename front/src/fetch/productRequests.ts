@@ -5,6 +5,16 @@ export interface ProductFilters {
   search?: string;
   category?: string;
   sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ProductListResponse {
+  items: ProductDTO[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export function getProducts(filters: ProductFilters = {}) {
@@ -13,8 +23,10 @@ export function getProducts(filters: ProductFilters = {}) {
   if (filters.search) params.set("search", filters.search);
   if (filters.category) params.set("category", filters.category);
   if (filters.sort) params.set("sort", filters.sort);
+  if (typeof filters.page === "number" && filters.page > 0) params.set("page", String(filters.page));
+  if (typeof filters.limit === "number" && filters.limit > 0) params.set("limit", String(filters.limit));
 
-  return apiRequest<ProductDTO[]>(`/products?${params.toString()}`);
+  return apiRequest<ProductListResponse>(`/products?${params.toString()}`);
 }
 
 export function createProduct(product: Omit<ProductDTO, "id">) {

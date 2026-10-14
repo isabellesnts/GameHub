@@ -9,11 +9,16 @@ import type { ProductDTO } from "@/dto/ProductDTO";
 import { createProduct, deleteProduct, getProducts } from "@/fetch/productRequests";
 import { measurePerformance } from "@/utils/measurePerformance";
 
+const PAGE_SIZE = 12;
+
 export function ProductsPage() {
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [sort, setSort] = useState("name");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -32,6 +37,33 @@ export function ProductsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, category, sort]);
+
+  const loadProducts = useCallback(async (targetPage = page) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await measurePerformance(
+        "carregamento de produtos",
+        () => getProducts({ search, category, sort, page: targetPage, limit: PAGE_SIZE })
+      );
+      setProducts(result.items);
+      setTotalProducts(result.total);
+      setTotalPages(result.totalPages);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setLoading(false);
+    }
+  }, [search, category, sort, page]);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -39,6 +71,7 @@ export function ProductsPage() {
     setCreating(true);
     setCreateMessage("");
     setError("");
+
     try {
       await createProduct({
         name: String(data.get("name") ?? "").trim(),
@@ -48,8 +81,9 @@ export function ProductsPage() {
         stock: Number(data.get("stock"))
       });
       setCreateMessage("Produto cadastrado. Catálogo atualizado.");
+      setPage(1);
       form.reset();
-      await loadProducts();
+      await loadProducts(1);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível cadastrar o produto.");
     } finally {
@@ -57,48 +91,24 @@ export function ProductsPage() {
     }
   }
 
-
-  const loadProducts = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await measurePerformance(
-        "carregamento de produtos",
-        () => getProducts({ search, category, sort })
-      );
-      setProducts(result);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Erro inesperado.");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, category, sort]);
-
-  useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
-
   async function handleDelete(id: number) {
     if (!window.confirm("Deseja excluir este produto?")) return;
 
     try {
       await deleteProduct(id);
-      await loadProducts();
+      setPage(1);
+      await loadProducts(1);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível excluir.");
     }
   }
 
-  const visibleProducts = products
-    .filter((product) => {
-      const term = search.toLowerCase();
-      return (product.name.toLowerCase().includes(term) || product.description.toLowerCase().includes(term))
-        && (!category || product.category === category);
-    })
-    .sort((a, b) => sort === "price"
-      ? String(a.price).localeCompare(String(b.price))
-      : a.name.localeCompare(b.name));
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("");
+    setSort("name");
+    setPage(1);
+  };
 
   return (
     <section>
@@ -108,7 +118,7 @@ export function ProductsPage() {
           <h1>Produtos</h1>
           <p>Pesquise e consulte o estoque da loja.</p>
         </div>
-        <span className="result-count">{visibleProducts.length} produtos • catálogo completo</span>
+        <span className="result-count">{totalProducts} produtos • página {page} de {Math.max(1, totalPages)}</span>
       </div>
 
       {isAdmin && (
@@ -147,16 +157,31 @@ export function ProductsPage() {
             <option value="price">Preço</option>
           </select>
         </label>
+        <button type="button" className="button" onClick={clearFilters}>Limpar filtros</button>
       </div>
 
       {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={loadProducts} /> : (
-        <div className="product-grid">
-          {visibleProducts.map((product) => (
-            <ProductCard key={product.id} product={product} onDelete={handleDelete} />
-          ))}
-          {visibleProducts.length === 0 && <p>Nenhum produto encontrado.</p>}
-        </div>
+        <>
+          <div className="product-grid">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} onDelete={handleDelete} />
+            ))}
+            {products.length === 0 && <p>Nenhum produto encontrado.</p>}
+          </div>
+
+          <div className="pagination" style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16 }}>
+            <button type="button" className="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+              Anterior
+            </button>
+            <span>Página {page} de {Math.max(1, totalPages)}</span>
+            <button type="button" className="button" disabled={page >= totalPages || loading} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+              Próxima
+            </button>
+          </div>
+        </>
       )}
     </section>
   );
 }
+
+export default ProductsPage;

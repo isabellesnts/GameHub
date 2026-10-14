@@ -5,7 +5,7 @@ export class ProductService {
   constructor(private readonly repository = new ProductRepository()) {}
 
   list(filters: ProductFilters) {
-    return this.repository.findAll(filters);
+    return this.repository.findPage(filters);
   }
 
   create(input: CreateProductDTO) {

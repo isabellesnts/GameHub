@@ -16,6 +16,14 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
+CREATE INDEX IF NOT EXISTS idx_products_name ON products (name);
+CREATE INDEX IF NOT EXISTS idx_products_price ON products (price);
+CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON products USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_description_trgm ON products USING gin (description gin_trgm_ops);
+
 INSERT INTO products (
     name,
     description,
@@ -73,7 +81,3 @@ VALUES
         50,
         NOW()
     );
-
-DROP INDEX IF EXISTS idx_products_category;
-DROP INDEX IF EXISTS idx_products_name;
-DROP INDEX IF EXISTS idx_products_price;
