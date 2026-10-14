@@ -13,9 +13,11 @@ const PAGE_SIZE = 12;
 
 export function ProductsPage() {
   const [products, setProducts] = useState<ProductDTO[]>([]);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [sort, setSort] = useState("name");
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -38,8 +40,17 @@ export function ProductsPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
     setPage(1);
-  }, [search, category, sort]);
+  }, [category, sort, lowStockOnly]);
 
   const loadProducts = useCallback(async (targetPage = page) => {
     setLoading(true);
@@ -48,7 +59,7 @@ export function ProductsPage() {
     try {
       const result = await measurePerformance(
         "carregamento de produtos",
-        () => getProducts({ search, category, sort, page: targetPage, limit: PAGE_SIZE })
+        () => getProducts({ search, category, sort, page: targetPage, limit: PAGE_SIZE, lowStockOnly })
       );
       setProducts(result.items);
       setTotalProducts(result.total);
@@ -58,7 +69,7 @@ export function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, category, sort, page]);
+  }, [search, category, sort, page, lowStockOnly]);
 
   useEffect(() => {
     void loadProducts();
@@ -104,9 +115,11 @@ export function ProductsPage() {
   }
 
   const clearFilters = () => {
+    setSearchInput("");
     setSearch("");
     setCategory("");
     setSort("name");
+    setLowStockOnly(false);
     setPage(1);
   };
 
@@ -139,7 +152,7 @@ export function ProductsPage() {
       <div className="filters">
         <label>
           Buscar
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome do produto..." />
+          <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Nome do produto..." />
         </label>
         <label>
           Categoria
@@ -153,9 +166,15 @@ export function ProductsPage() {
         <label>
           Ordenar
           <select value={sort} onChange={(event) => setSort(event.target.value)}>
-            <option value="name">Nome</option>
-            <option value="price">Preço</option>
+            <option value="name">Nome A-Z</option>
+            <option value="price">Preço menor</option>
+            <option value="price-desc">Preço maior</option>
+            <option value="stock">Estoque baixo primeiro</option>
           </select>
+        </label>
+        <label className="checkbox-field">
+          <input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} />
+          Só estoque baixo
         </label>
         <button type="button" className="button" onClick={clearFilters}>Limpar filtros</button>
       </div>

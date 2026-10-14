@@ -9,6 +9,7 @@ interface DashboardDTO {
   lowStock: number;
   inventoryValue: number;
   categories: number;
+  averagePrice: number;
 }
 
 export function DashboardPage() {
@@ -35,6 +36,7 @@ export function DashboardPage() {
         <MetricCard label="Produtos" value={String(data.totalProducts)} description="Itens cadastrados" />
         <MetricCard label="Estoque baixo" value={String(data.lowStock)} description="Cinco unidades ou menos" />
         <MetricCard label="Categorias" value={String(data.categories)} description="Categorias disponíveis" />
+        <MetricCard label="Preço médio" value={data.averagePrice.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} description="Média por item" />
         <MetricCard label="Valor em estoque" value={data.inventoryValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} description="Preço × quantidade" />
       </div>
     </section>

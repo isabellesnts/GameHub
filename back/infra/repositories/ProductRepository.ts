@@ -8,6 +8,7 @@ export interface ProductFilters {
   sort?: string;
   page?: number;
   limit?: number;
+  lowStockOnly?: boolean;
 }
 
 export interface ProductListResult {
@@ -18,8 +19,20 @@ export interface ProductListResult {
   totalPages: number;
 }
 
-export function normalizeProductSort(sort?: string): "name" | "price" {
-  return sort === "price" ? "price" : "name";
+export function normalizeProductSort(sort?: string): "name" | "price" | "stock" {
+  const normalized = String(sort ?? "").trim().toLowerCase();
+
+  if (normalized.startsWith("price")) return "price";
+  if (normalized.startsWith("stock")) return "stock";
+  return "name";
+}
+
+export function buildOrderByClause(sort?: string): string {
+  const normalized = String(sort ?? "").trim().toLowerCase();
+  const field = normalizeProductSort(sort);
+  const descending = normalized.includes("desc") || normalized.endsWith("-desc") || normalized.endsWith("_desc");
+
+  return `${field} ${descending ? "DESC" : "ASC"}`;
 }
 
 export function buildProductQuery(filters: ProductFilters = {}) {
@@ -30,16 +43,21 @@ export function buildProductQuery(filters: ProductFilters = {}) {
   if (search) {
     values.push(`%${search}%`);
     const parameter = `$${values.length}`;
-    conditions.push(`(name ILIKE ${parameter} OR description ILIKE ${parameter})`);
+    conditions.push(`(LOWER(name) ILIKE LOWER(${parameter}) OR LOWER(description) ILIKE LOWER(${parameter}))`);
   }
 
-  if (filters.category) {
-    values.push(filters.category);
-    conditions.push(`category = $${values.length}`);
+  if (filters.category?.trim()) {
+    values.push(filters.category.trim());
+    const parameter = `$${values.length}`;
+    conditions.push(`LOWER(category) = LOWER(${parameter})`);
+  }
+
+  if (filters.lowStockOnly) {
+    conditions.push("stock <= 5");
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const orderBy = normalizeProductSort(filters.sort) === "price" ? "price ASC" : "name ASC";
+  const orderBy = buildOrderByClause(filters.sort);
 
   return { where, values, orderBy };
 }
@@ -74,18 +92,24 @@ export class ProductRepository {
     const offset = (page - 1) * limit;
     const { where, values, orderBy } = buildProductQuery(filters);
 
-    const totalSql = `SELECT COUNT(*) AS total FROM products ${where}`;
-    const totalResult = await db.query<{ total: string }>(totalSql, values);
-    const total = Number(totalResult.rows[0]?.total ?? 0);
-
-    const itemsSql = `SELECT id, name, description, category, price, stock
+    const itemsSql = `
+      SELECT id, name, description, category, price, stock, COUNT(*) OVER() AS total
       FROM products ${where}
       ORDER BY ${orderBy}
-      LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
-    const result = await db.query(itemsSql, [...values, limit, offset]);
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+    `;
+    const result = await db.query<{ total?: string } & Record<string, unknown>>(itemsSql, [...values, limit, offset]);
+    const total = Number(result.rows[0]?.total ?? 0);
 
     return {
-      items: result.rows.map(mapProduct),
+      items: result.rows.map((row) => ({
+        id: Number(row.id),
+        name: String(row.name),
+        description: String(row.description),
+        category: String(row.category),
+        price: Number(row.price),
+        stock: Number(row.stock)
+      })),
       total,
       page,
       limit,
@@ -121,7 +145,8 @@ export class ProductRepository {
          COUNT(*) AS "totalProducts",
          COUNT(*) FILTER (WHERE stock <= 5) AS "lowStock",
          COALESCE(SUM(price * stock), 0) AS "inventoryValue",
-         COUNT(DISTINCT category) AS "categories"
+         COUNT(DISTINCT category) AS "categories",
+         COALESCE(AVG(price), 0) AS "averagePrice"
        FROM products`
     );
     const row = result.rows[0] ?? {};
@@ -131,7 +156,8 @@ export class ProductRepository {
       totalProducts: Number(row.totalProducts ?? 0),
       lowStock: Number(row.lowStock ?? 0),
       inventoryValue: Number(row.inventoryValue ?? 0),
-      categories: Number(row.categories ?? 0)
+      categories: Number(row.categories ?? 0),
+      averagePrice: Number(row.averagePrice ?? 0)
     };
   }
 }

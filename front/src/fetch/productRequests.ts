@@ -7,6 +7,7 @@ export interface ProductFilters {
   sort?: string;
   page?: number;
   limit?: number;
+  lowStockOnly?: boolean;
 }
 
 export interface ProductListResponse {
@@ -25,6 +26,7 @@ export function getProducts(filters: ProductFilters = {}) {
   if (filters.sort) params.set("sort", filters.sort);
   if (typeof filters.page === "number" && filters.page > 0) params.set("page", String(filters.page));
   if (typeof filters.limit === "number" && filters.limit > 0) params.set("limit", String(filters.limit));
+  if (typeof filters.lowStockOnly === "boolean") params.set("lowStockOnly", String(filters.lowStockOnly));
 
   return apiRequest<ProductListResponse>(`/products?${params.toString()}`);
 }
